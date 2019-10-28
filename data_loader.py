@@ -1,16 +1,18 @@
 from torch.utils.data import Dataset
 from vocab import log_parser
 from itertools import groupby
+import random
 import torch
 import re
 import os
 
 
 class DataSets(Dataset):
-    def __init__(self, data_path, vocab_path, max_len):
+    def __init__(self, data_path, vocab_path, max_len, is_train):
         self.data_path = data_path
         self.vocab_path = vocab_path
         self.max_len = max_len
+        self.is_train = is_train
 
         self.data = self.load_data()
         self.vocab = self.load_vocab()
@@ -62,12 +64,30 @@ class DataSets(Dataset):
             key, logs = subgroup
             if len(logs) == 0:
                 raise ValueError('Zero-length sequence exists')
-            if len(logs) == 1:
+            elif len(logs) == 1:
                 # 로그가 한 개인 경우 AE처럼 자기 자신을 예측하도록 설정
                 logs += [logs[0], logs[0]]
+
             elif len(logs) == 2:
-                # 로그가 두 개인 경우 앞, 뒤 로그를 하나씩 추가
-                logs = [logs[0]] * 2 + [logs[1]] * 2
+                # 로그가 두 개인 경우 50% 확률로 앞, 뒤 하나씩 추가
+                # Augmentation : train일 때 30% 확률로 데이터 추가
+
+                if random.random() > 0.5:
+                    logs = [logs[0]] + [logs[1]] * 2
+                    if self.is_train and random.random() < 0.3:
+                        logs = [logs[0]] + logs
+                else:
+                    logs = [logs[0]] * 2 + [logs[1]]
+                    if self.is_train and random.random() < 0.3:
+                        logs = logs + [logs[2]]
+
+            elif len(logs) >= 5 and self.is_train :
+                # 로그가 세 개인 경우 augmentation만 진행
+                # Augmentation : train일 때 100% 확률로 데이터 추가
+                for i in range(len(logs[::2]) - 2):
+                    if random.random() < 1:
+                        three_len_logs.append((key, logs[::2][i:i + 3]))
+                        assert len(logs[::2][i:i + 3]) == 3
 
             for i in range(len(logs) - 2):
                 three_len_logs.append((key, logs[i:i + 3]))

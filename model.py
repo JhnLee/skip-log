@@ -12,7 +12,7 @@ class Encoder(nn.Module):
         self.gru_layer = nn.GRU(embedding_hidden_dim, gru_hidden_dim,
                                 num_layers=num_hidden_layer,
                                 batch_first=True,
-                                dropout=dropout_p,
+                                dropout=dropout_p if num_hidden_layer > 1 else 0,
                                 bidirectional=True)
         self.fc = nn.Linear(gru_hidden_dim * 2, gru_hidden_dim)
 

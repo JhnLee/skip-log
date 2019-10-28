@@ -2,7 +2,8 @@ from data_loader import DataSets
 from model import SkipLog
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from warmup_scheduler import GradualWarmupScheduler
 from tqdm import tqdm
 import torch
 import os
@@ -18,8 +19,15 @@ def train(train_data_path, test_data_path, vocab_path, model_save_dir,
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
     # Load Datasets
-    tr_set = DataSets(data_path=train_data_path, vocab_path=vocab_path, max_len=max_len)
-    test_set = DataSets(data_path=test_data_path, vocab_path=vocab_path, max_len=max_len)
+    tr_set = DataSets(data_path=train_data_path,
+                      vocab_path=vocab_path,
+                      max_len=max_len,
+                      is_train=True)
+
+    test_set = DataSets(data_path=test_data_path,
+                        vocab_path=vocab_path,
+                        max_len=max_len,
+                        is_train=False)
 
     tr_loader = DataLoader(dataset=tr_set,
                            batch_size=batch_size,
@@ -45,8 +53,13 @@ def train(train_data_path, test_data_path, vocab_path, model_save_dir,
     model.to(device)
     model.zero_grad()
 
+    total_step = len(tr_loader) * epochs
     optimizer = torch.optim.Adam(params=model.parameters(), lr=lr)
-    scheduler = ReduceLROnPlateau(optimizer, factor=0.05, patience=3, verbose=True)
+    scheduler = CosineAnnealingLR(optimizer, T_max=total_step)
+    warmup_scheduler = GradualWarmupScheduler(optimizer,
+                                              multiplier=100,
+                                              total_epoch=total_step * 0.1,
+                                              after_scheduler=scheduler)
 
     # tensorboard
     if not os.path.exists(model_save_dir):
@@ -92,11 +105,14 @@ def train(train_data_path, test_data_path, vocab_path, model_save_dir,
             optimizer.step()
             model.zero_grad()
             global_step += 1
+            warmup_scheduler.step()
+
+            show_lr = warmup_scheduler.get_lr()[0]
+            writer.add_scalars('lr', {'lr': show_lr}, global_step)
 
             if global_step % eval_step == 0:
 
                 val_loss, val_acc = evaluate(test_loader, model, vocab, device)
-                scheduler.step(val_loss)
 
                 writer.add_scalars('loss', {'train': train_loss / eval_step,
                                             'val': val_loss}, global_step)
@@ -107,11 +123,13 @@ def train(train_data_path, test_data_path, vocab_path, model_save_dir,
                            'tr_loss: {:.3f}, '
                            'val_loss: {:.3f}, '
                            'tr_acc: {:.3f}, '
-                           'val_acc: {:.3f} '.format(global_step,
-                                                     train_loss / eval_step,
-                                                     val_loss,
-                                                     train_acc / eval_step,
-                                                     val_acc))
+                           'val_acc: {:.3f} '
+                           'lr: {:.3f}'.format(global_step,
+                                               train_loss / eval_step,
+                                               val_loss,
+                                               train_acc / eval_step,
+                                               val_acc,
+                                               float(show_lr)))
 
                 train_loss = 0
                 train_acc = 0
@@ -120,6 +138,7 @@ def train(train_data_path, test_data_path, vocab_path, model_save_dir,
                     name = '/bestmodel_loss_' + str(round(val_loss, 3)) + '.bin'
                     torch.save(model.state_dict(), model_save_dir + name)
                     best_val_loss = val_loss
+
 
 
 def evaluate(dataloader, model, vocab, device):

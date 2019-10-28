@@ -4,9 +4,10 @@ __pycache__/
 *$py.class
 .ipynb_checkpoints/
 data/
-.ipynb
+*.ipynb
 .idea/
 model/
+model_data_scaled_augmented_3layers/
 
 # C extensions
 *.so
