@@ -46,7 +46,7 @@ def train(train_data_path, test_data_path, vocab_path, model_save_dir,
     model.zero_grad()
 
     optimizer = torch.optim.Adam(params=model.parameters(), lr=lr)
-    scheduler = ReduceLROnPlateau(optimizer, factor=0.05, patience=4, verbose=True)
+    scheduler = ReduceLROnPlateau(optimizer, factor=0.05, patience=3, verbose=True)
 
     # tensorboard
     if not os.path.exists(model_save_dir):

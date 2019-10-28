@@ -6,6 +6,7 @@ __pycache__/
 data/
 .ipynb
 .idea/
+model/
 
 # C extensions
 *.so

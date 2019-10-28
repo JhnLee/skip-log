@@ -60,6 +60,7 @@ class Decoder(nn.Module):
 
         concat_input = torch.cat((decoder_output.squeeze(0), context.squeeze(1)), 1)  # (B x 2H)
         concat_output = torch.tanh(self.concat_layer(concat_input))  # (B x H)
+
         out = self.fc_layer(concat_output).unsqueeze(0)  # (1 x B x V)
 
         return out, last_hidden
@@ -76,7 +77,8 @@ class SkipLog(nn.Module):
         self.dropout = nn.Dropout(dropout_p)
         self.prev_decoder = Decoder(vocab, embedding_hidden_dim, gru_hidden_dim)
         self.next_decoder = Decoder(vocab, embedding_hidden_dim, gru_hidden_dim)
-        self.loss_fn = nn.CrossEntropyLoss(ignore_index=vocab.index('<PAD>'))
+        self.prev_loss_fn = nn.CrossEntropyLoss(ignore_index=vocab.index('<PAD>'))
+        self.next_loss_fn = nn.CrossEntropyLoss(ignore_index=vocab.index('<PAD>'))
 
     def forward(self, encoder_mask, encoder_input, decoder_input, decoder_target):
 
@@ -99,7 +101,7 @@ class SkipLog(nn.Module):
 
         outputs = torch.zeros(2 * max_len, batch_size, self.vocab_size).to(self.device)  # (2L x B x V)
 
-        for t in range(self.max_len):
+        for t in range(max_len):
             prev_output, prev_hidden = self.prev_decoder(target_embedded=prev_embedded[t].unsqueeze(0),
                                                          encoder_outputs=encoder_outputs,
                                                          last_hidden=prev_hidden,
@@ -108,12 +110,18 @@ class SkipLog(nn.Module):
                                                          encoder_outputs=encoder_outputs,
                                                          last_hidden=next_hidden,
                                                          encoder_mask=encoder_mask)
-            outputs[2*t:2*t+2] = torch.cat((prev_output, next_output), dim=0)  # (2 x B x V)
+
+            outputs[t] = prev_output.squeeze(0)
+            outputs[max_len + t] = next_output.squeeze(0)
 
         # (2L x B x V) , (B x 2L)  =>  (B*2L x V) , (B*2L)
-        loss = self.loss_fn(outputs.view(-1, self.vocab_size), decoder_target.reshape(-1))
+        prev_target = decoder_target.transpose(1, 0)[:max_len]
+        next_target = decoder_target.transpose(1, 0)[max_len:]
 
-        return outputs, loss
+        prev_loss = self.prev_loss_fn(outputs[:max_len].view(-1, self.vocab_size), prev_target.reshape(-1))
+        next_loss = self.next_loss_fn(outputs[max_len:].view(-1, self.vocab_size), next_target.reshape(-1))
+
+        return outputs, prev_loss + next_loss
 
 
 class Attention(nn.Module):
