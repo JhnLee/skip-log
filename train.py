@@ -14,20 +14,20 @@ torch.cuda.manual_seed(0)
 
 
 def train(train_data_path, test_data_path, vocab_path, model_save_dir,
-          batch_size, epochs, lr, eval_step, max_len,  grad_clip_norm, model_param,):
-
+          batch_size, epochs, lr, eval_step, max_len, grad_clip_norm, model_param,
+          augmentation, ):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
     # Load Datasets
     tr_set = DataSets(data_path=train_data_path,
                       vocab_path=vocab_path,
                       max_len=max_len,
-                      is_train=True)
+                      augmentation=augmentation)
 
     test_set = DataSets(data_path=test_data_path,
                         vocab_path=vocab_path,
                         max_len=max_len,
-                        is_train=False)
+                        augmentation=augmentation)
 
     tr_loader = DataLoader(dataset=tr_set,
                            batch_size=batch_size,
@@ -140,9 +140,7 @@ def train(train_data_path, test_data_path, vocab_path, model_save_dir,
                     best_val_loss = val_loss
 
 
-
 def evaluate(dataloader, model, vocab, device):
-
     val_loss = 0
     val_acc = 0
 
@@ -181,6 +179,14 @@ if __name__ == '__main__':
     # Load hyperparams
     with open('./hparams.json', 'r') as f:
         hparams = json.load(f)
+
+    model_dir = hparams['train_hparams']['model_save_dir']
+
+    if not os.path.exists(model_dir):
+        os.mkdir(model_dir)
+
+    with open(model_dir + '/hparams.json', 'w') as f:
+        json.dump(hparams, f, indent=4)
 
     train(**hparams['train_hparams'],
           model_param=hparams['model_hparams'])

@@ -1,18 +1,19 @@
 from torch.utils.data import Dataset
 from vocab import log_parser
-from itertools import groupby
-import random
+from collections import defaultdict
 import torch
 import re
 import os
 
 
 class DataSets(Dataset):
-    def __init__(self, data_path, vocab_path, max_len, is_train):
+    def __init__(self, data_path, vocab_path, max_len, augmentation=False):
         self.data_path = data_path
         self.vocab_path = vocab_path
         self.max_len = max_len
-        self.is_train = is_train
+        self.augmentation = augmentation
+        self.preprocessed_log = None
+        self.blk = None
 
         self.data = self.load_data()
         self.vocab = self.load_vocab()
@@ -35,9 +36,9 @@ class DataSets(Dataset):
             sequence += [self.pad] * diff
         else:
             if eol_preserve:
-                sequence = sequence[:self.max_len-1] + [self.eol]
+                sequence = sequence[:self.max_len - 1] + [self.eol]
             else:
-                sequence = sequence[:self.max_len-1]
+                sequence = sequence[:self.max_len]
 
         return sequence
 
@@ -56,41 +57,20 @@ class DataSets(Dataset):
         self.blk = [get_blk_id(log) for log in self.data]
 
         # blk_id 별로 묶기
-        grouped_data = [[key, list(list(zip(*list(group)))[0])]for key, group
-                        in groupby(zip(self.data, self.blk), lambda x: x[1])]
+        grouped_data = defaultdict(list)
+        for blk, log in zip(self.blk, self.data):
+            grouped_data[blk].append(log)
+        grouped_data = list(grouped_data.items())
 
         three_len_logs = []
-        for subgroup in grouped_data:
-            key, logs = subgroup
-            if len(logs) == 0:
-                raise ValueError('Zero-length sequence exists')
-            elif len(logs) == 1:
-                # 로그가 한 개인 경우 AE처럼 자기 자신을 예측하도록 설정
-                logs += [logs[0], logs[0]]
+        for key, logs in grouped_data:
+            three_len_logs += [(key, logs[i:i + 3]) for i in range(len(logs) - 2) if len(logs) > 2]
 
-            elif len(logs) == 2:
-                # 로그가 두 개인 경우 50% 확률로 앞, 뒤 하나씩 추가
-                # Augmentation : train일 때 30% 확률로 데이터 추가
-
-                if random.random() > 0.5:
-                    logs = [logs[0]] + [logs[1]] * 2
-                    if self.is_train and random.random() < 0.3:
-                        logs = [logs[0]] + logs
-                else:
-                    logs = [logs[0]] * 2 + [logs[1]]
-                    if self.is_train and random.random() < 0.3:
-                        logs = logs + [logs[2]]
-
-            elif len(logs) >= 5 and self.is_train :
-                # 로그가 세 개인 경우 augmentation만 진행
-                # Augmentation : train일 때 100% 확률로 데이터 추가
-                for i in range(len(logs[::2]) - 2):
-                    if random.random() < 1:
-                        three_len_logs.append((key, logs[::2][i:i + 3]))
-                        assert len(logs[::2][i:i + 3]) == 3
-
-            for i in range(len(logs) - 2):
-                three_len_logs.append((key, logs[i:i + 3]))
+        if self.augmentation is True:
+            # augmentation 진행
+            # 앞, 뒤 데이터뿐만 아니라 한 칸 건너뛴 로그도 예측
+            for key, logs in grouped_data:
+                three_len_logs += [(key, logs[::2][i:i + 3]) for i in range(len(logs[::2]) - 2) if len(logs[::2]) > 2]
 
         self.preprocessed_log = three_len_logs
 

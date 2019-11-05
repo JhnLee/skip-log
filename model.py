@@ -34,7 +34,7 @@ class Encoder(nn.Module):
         # Concat forward and backward hidden states w/ activation function
         encoder_hidden = encoder_hidden.view(self.num_hidden_layer, 2, batch_size, self.gru_hidden_dim)[-1]
         encoder_hidden = torch.cat((encoder_hidden[0], encoder_hidden[1]), 1)  # (2 x B x H)  =>  (B x 2H)
-        encoder_hidden = torch.tanh(self.fc(encoder_hidden)).unsqueeze(0)  # (B x 2H)  =>  (1 x B x H)
+        encoder_hidden = self.fc(encoder_hidden).unsqueeze(0)  # (B x 2H)  =>  (1 x B x H)
 
         return encoder_outputs, encoder_hidden
 
