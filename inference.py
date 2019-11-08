@@ -21,10 +21,10 @@ def inference(infer_data_path, vocab_path, max_len, model_param, ):
     infer_set = DataSets(data_path=infer_data_path,
                          vocab_path=vocab_path,
                          max_len=max_len,
-                         is_train=True)
+                         augmentation=False)
 
     infer_loader = DataLoader(dataset=infer_set,
-                              batch_size=1,
+                              batch_size=1024,
                               shuffle=True,
                               num_workers=4,
                               pin_memory=True,

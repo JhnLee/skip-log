@@ -26,20 +26,18 @@ def train(train_data_path, test_data_path, vocab_path, model_save_dir,
 
     test_set = DataSets(data_path=test_data_path,
                         vocab_path=vocab_path,
-                        max_len=max_len,
-                        augmentation=augmentation)
+                        max_len=max_len)
 
     tr_loader = DataLoader(dataset=tr_set,
                            batch_size=batch_size,
                            shuffle=True,
-                           num_workers=4,
+                           num_workers=8,
                            pin_memory=True,
                            drop_last=True)
 
     test_loader = DataLoader(dataset=test_set,
                              batch_size=batch_size,
-                             shuffle=True,
-                             num_workers=4,
+                             num_workers=8,
                              pin_memory=True,
                              drop_last=True)
 
@@ -160,6 +158,7 @@ def evaluate(dataloader, model, vocab, device):
             outputs, loss = model(**inputs)
 
             pred = outputs.max(dim=2)[1].transpose(0, 1)  # (B x 2L)
+
             # mean accuracy except pad token
             not_pad = decoder_target != vocab.index('<PAD>')
             num_words = not_pad.sum()
