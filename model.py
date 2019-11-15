@@ -67,11 +67,10 @@ class Decoder(nn.Module):
 
 
 class SkipLog(nn.Module):
-    def __init__(self, vocab, max_len, embedding_hidden_dim, num_hidden_layer, gru_hidden_dim, dropout_p, device,):
+    def __init__(self, vocab, embedding_hidden_dim, num_hidden_layer, gru_hidden_dim, dropout_p, device,):
         super(SkipLog, self).__init__()
         self.device = device
         self.vocab_size = len(vocab)
-        self.max_len = max_len
         self.encoder = Encoder(vocab, embedding_hidden_dim, gru_hidden_dim, num_hidden_layer, dropout_p)
         self.embedding_layer = nn.Embedding(self.vocab_size, embedding_hidden_dim, padding_idx=vocab.index('<PAD>'))
         self.dropout = nn.Dropout(dropout_p)

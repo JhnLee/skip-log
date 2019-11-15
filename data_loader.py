@@ -7,10 +7,10 @@ import os
 
 
 class DataSets(Dataset):
-    def __init__(self, data_path, vocab_path, max_len, augmentation=False):
+    def __init__(self, data_path, vocab_path, augmentation=False):
         self.data_path = data_path
         self.vocab_path = vocab_path
-        self.max_len = max_len
+        self.max_len = None
         self.augmentation = augmentation
         self.preprocessed_log = None
         self.blk = None
@@ -28,19 +28,11 @@ class DataSets(Dataset):
         prev_output = prev + [self.eol]
         next_input = [self.sol] + next
         next_output = next + [self.eol]
-        return input, prev_input, prev_output, next_input, next_output
+        length = max([len(d) + 1 for d in (input, prev, next)])
+        return input, prev_input, prev_output, next_input, next_output, length
 
-    def pad_sequence(self, sequence, eol_preserve=False):
-        diff = self.max_len - len(sequence)
-        if diff > 0:
-            sequence += [self.pad] * diff
-        else:
-            if eol_preserve:
-                sequence = sequence[:self.max_len - 1] + [self.eol]
-            else:
-                sequence = sequence[:self.max_len]
-
-        return sequence
+    def pad_sequence(self, sequence, max_len):
+        return [l + [self.pad] * (max_len - len(l)) for l in sequence]
 
     def token_to_idcs(self, token):
         try:
@@ -89,23 +81,24 @@ class DataSets(Dataset):
             vocab = f.read().splitlines()
         return vocab
 
+    def batch_function(self, batch):
+        batches = list(zip(*batch))
+        blk, lengths = batches[:2]
+        max_len = max(lengths)
+        # Add pad tokens and make masks for attention
+        encoder_input, prev_in, prev_out, next_in, next_out = \
+            torch.tensor([self.pad_sequence(log, max_len) for log in batches[2:]])
+        attention_mask = torch.ones_like(encoder_input).masked_fill(encoder_input == 0, 0)
+
+        decoder_input = torch.cat((prev_in, next_in), dim=1)  # 2L
+        decoder_target = torch.cat((prev_out, next_out), dim=1)  # 2L
+        return blk, max_len, attention_mask, encoder_input, decoder_input, decoder_target
+
     def __len__(self):
         return len(self.preprocessed_log)
 
     def __getitem__(self, idx):
         blk, logs = self.preprocessed_log[idx]
         idcs = ([self.token_to_idcs(l) for l in log_parser(log).split()[3:]] for log in logs)
-        encoder_input, prev_input, prev_output, next_input, next_output = self.add_special_token(*idcs)
-        encoder_input, prev_output, next_output = [torch.tensor(self.pad_sequence(i, True))
-                                                   for i in [encoder_input, prev_output, next_output]]
-
-        prev_input, next_input = [torch.tensor(self.pad_sequence(i))
-                                  for i in [prev_input, next_input]]
-
-        decoder_input = torch.cat((prev_input, next_input), dim=0)  # 2L
-        decoder_target = torch.cat((prev_output, next_output), dim=0)  # 2L
-
-        encoder_mask = torch.tensor([0 if t == self.pad else 1 for t in encoder_input])
-
-        return blk, encoder_mask, encoder_input, decoder_input, decoder_target
-
+        encoder_input, prev_input, prev_output, next_input, next_output, length = self.add_special_token(*idcs)
+        return blk, length, encoder_input, prev_input, prev_output, next_input, next_output

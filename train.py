@@ -21,31 +21,30 @@ def train(train_data_path, test_data_path, vocab_path, model_save_dir,
     # Load Datasets
     tr_set = DataSets(data_path=train_data_path,
                       vocab_path=vocab_path,
-                      max_len=max_len,
                       augmentation=augmentation)
 
     test_set = DataSets(data_path=test_data_path,
-                        vocab_path=vocab_path,
-                        max_len=max_len)
+                        vocab_path=vocab_path)
 
     tr_loader = DataLoader(dataset=tr_set,
                            batch_size=batch_size,
                            shuffle=True,
                            num_workers=8,
                            pin_memory=True,
-                           drop_last=True)
+                           drop_last=True,
+                           collate_fn=tr_set.batch_function)
 
     test_loader = DataLoader(dataset=test_set,
                              batch_size=batch_size,
                              num_workers=8,
                              pin_memory=True,
-                             drop_last=True)
+                             drop_last=True,
+                             collate_fn=tr_set.batch_function)
 
     # Load model
     vocab = tr_set.vocab
     model = SkipLog(vocab=vocab,
                     device='cuda',
-                    max_len=max_len,
                     **model_param)
 
     model.to(device)
