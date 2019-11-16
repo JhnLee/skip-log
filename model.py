@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 class Encoder(nn.Module):
-    def __init__(self, vocab, embedding_hidden_dim, gru_hidden_dim, num_hidden_layer, dropout_p=0.1):
+    def __init__(self, vocab, embedding_hidden_dim, gru_hidden_dim, num_hidden_layer, dropout_p):
         super(Encoder, self).__init__()
         self.gru_hidden_dim = gru_hidden_dim
         self.num_hidden_layer = num_hidden_layer
@@ -40,7 +40,7 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, vocab, embedding_hidden_dim, gru_hidden_dim, attention_method='dot'):
+    def __init__(self, vocab, embedding_hidden_dim, gru_hidden_dim, attention_method):
         super(Decoder, self).__init__()
         self.gru_layer = nn.GRU(embedding_hidden_dim, gru_hidden_dim)
         self.attention_layer = Attention(attention_method, gru_hidden_dim * 2)
@@ -67,15 +67,16 @@ class Decoder(nn.Module):
 
 
 class SkipLog(nn.Module):
-    def __init__(self, vocab, embedding_hidden_dim, num_hidden_layer, gru_hidden_dim, dropout_p, device,):
+    def __init__(self, vocab, embedding_hidden_dim, num_hidden_layer, gru_hidden_dim, device,
+                 dropout_p=0.1, attention_method='dot'):
         super(SkipLog, self).__init__()
         self.device = device
         self.vocab_size = len(vocab)
         self.encoder = Encoder(vocab, embedding_hidden_dim, gru_hidden_dim, num_hidden_layer, dropout_p)
         self.embedding_layer = nn.Embedding(self.vocab_size, embedding_hidden_dim, padding_idx=vocab.index('<PAD>'))
         self.dropout = nn.Dropout(dropout_p)
-        self.prev_decoder = Decoder(vocab, embedding_hidden_dim, gru_hidden_dim)
-        self.next_decoder = Decoder(vocab, embedding_hidden_dim, gru_hidden_dim)
+        self.prev_decoder = Decoder(vocab, embedding_hidden_dim, gru_hidden_dim, attention_method)
+        self.next_decoder = Decoder(vocab, embedding_hidden_dim, gru_hidden_dim, attention_method)
         self.prev_loss_fn = nn.CrossEntropyLoss(ignore_index=vocab.index('<PAD>'))
         self.next_loss_fn = nn.CrossEntropyLoss(ignore_index=vocab.index('<PAD>'))
 
@@ -127,9 +128,7 @@ class Attention(nn.Module):
     def __init__(self, method, hidden_size):
         """ Implementation of various attention score function """
         super(Attention, self).__init__()
-
         self.method = method
-        self.hidden_size = hidden_size
 
         if self.method == 'general':
             self.attn = nn.Linear(hidden_size, hidden_size)
@@ -141,26 +140,26 @@ class Attention(nn.Module):
         elif self.method == 'dot':
             pass
 
-    def forward(self, hidden, encoder_outputs, encoder_mask):
+    def forward(self, decoder_outputs, encoder_outputs, encoder_mask):
 
-        attn_energies = self.score(hidden, encoder_outputs, encoder_mask)
+        attn_energies = self.score(decoder_outputs, encoder_outputs, encoder_mask)
         attn_weight = torch.softmax(attn_energies, 2)
 
         return attn_weight  # (B x 1 x L)
 
-    def score(self, hidden, encoder_outputs, encoder_mask):
+    def score(self, decoder_outputs, encoder_outputs, encoder_mask):
         # encoder outputs : (B x L x H)
-        hidden = hidden.transpose(0, 1)  # (B x 1 x H)
+        decoder_outputs = decoder_outputs.transpose(0, 1)  # (B x 1 x H)
         if self.method == 'dot':
             # TODO : scaled dot product attention
-            energy = torch.bmm(hidden, encoder_outputs.transpose(1, 2))  # (B x 1 x L)
+            energy = torch.bmm(decoder_outputs, encoder_outputs.transpose(1, 2))  # (B x 1 x L)
 
         elif self.method == 'general':
-            energy = torch.bmm(hidden, self.attn(encoder_outputs).transpose(1, 2))  # (B x 1 x L)
+            energy = torch.bmm(decoder_outputs, self.attn(encoder_outputs).transpose(1, 2))  # (B x 1 x L)
 
         elif self.method == 'concat':
             seq_length = encoder_outputs.shape[1]
-            concat = torch.cat((hidden.repeat(1, seq_length, 1), encoder_outputs), 2)
+            concat = torch.cat((decoder_outputs.repeat(1, seq_length, 1), encoder_outputs), 2)
             energy = self.v(torch.tanh(self.attn(concat))).transpose(1, 2)  # (B x 1 x L)
 
         else:
