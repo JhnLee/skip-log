@@ -61,7 +61,7 @@ class Decoder(nn.Module):
         concat_input = torch.cat((decoder_output.squeeze(0), context.squeeze(1)), 1)  # (B x 2H)
         concat_output = torch.tanh(self.concat_layer(concat_input))  # (B x H)
 
-        out = self.fc_layer(concat_output).unsqueeze(0)  # (1 x B x V)
+        out = self.fc_layer(concat_output).unsqueeze(0)  # (B x V)
 
         return out, last_hidden
 

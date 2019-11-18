@@ -1,9 +1,14 @@
 from torch.utils.data import Dataset
 from vocab import log_parser
 from collections import defaultdict
+from utils import get_logger
+import logging
 import torch
 import re
 import os
+
+logger = get_logger('Skip-Log')
+logger.setLevel(logging.INFO)
 
 
 class DataSets(Dataset):
@@ -41,6 +46,7 @@ class DataSets(Dataset):
             return self.vocab.index('<UNK>')
 
     def group_data(self):
+        logger.info('preprocess data...')
 
         def get_blk_id(log):
             id_extractor = re.compile('blk_.\d+')
@@ -59,14 +65,17 @@ class DataSets(Dataset):
             three_len_logs += [(key, logs[i:i + 3]) for i in range(len(logs) - 2) if len(logs) > 2]
 
         if self.augmentation is True:
+            logger.info('do augmentation')
             # augmentation 진행
             # 앞, 뒤 데이터뿐만 아니라 한 칸 건너뛴 로그도 예측
             for key, logs in grouped_data:
                 three_len_logs += [(key, logs[::2][i:i + 3]) for i in range(len(logs[::2]) - 2) if len(logs[::2]) > 2]
 
         self.preprocessed_log = three_len_logs
+        logger.info('preprocessing is done, total {} data are loaded'.format(len(three_len_logs)))
 
     def load_data(self):
+        logger.info('load data...')
         with open(self.data_path, 'r') as f:
             data = f.read().splitlines()
         return data
@@ -92,7 +101,7 @@ class DataSets(Dataset):
 
         decoder_input = torch.cat((prev_in, next_in), dim=1)  # 2L
         decoder_target = torch.cat((prev_out, next_out), dim=1)  # 2L
-        return blk, max_len, attention_mask, encoder_input, decoder_input, decoder_target
+        return blk, attention_mask, encoder_input, decoder_input, decoder_target
 
     def __len__(self):
         return len(self.preprocessed_log)
