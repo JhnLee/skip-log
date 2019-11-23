@@ -1,30 +1,30 @@
 #!/usr/bin/env bash
 
 #model params
-EMBEDDING_HIDDEN_DIM=64
+EMBEDDING_HIDDEN_DIM=128
 NUM_HIDDEN_LAYER=1
 GRU_HIDDEN_DIM=512
 DROPOUT_P=0.1
 ATTENTION_METHOD="dot"
 
 #train params
-BATCH_SIZE=2048
+BATCH_SIZE=1024
 EVAL_BATCH_SIZE=512
 LEARNING_RATE=3e-5
-EPOCHS=1
+EPOCHS=5
 EVAL_STEP=1
-LOGGING_STEP=100
+LOGGING_STEP=1000
 GRAD_CLIP_NORM=1.0
 
 #other parameters
 NUM_WORKERS=8
 DEVICE="cuda"
-FP16=0
+FP16=1
 FP16_OPT_LEVEL="O1"
 SEED=0
 
 #run traininer
-for fp in 0 1; do
+for fp in 1; do
 	python train.py\
 		--embedding_hidden_dim=${EMBEDDING_HIDDEN_DIM}\
 		--num_hidden_layer=${NUM_HIDDEN_LAYER}\

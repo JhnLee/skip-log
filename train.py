@@ -38,7 +38,7 @@ def train(args, device):
                            collate_fn=tr_set.batch_function)
 
     val_loader = DataLoader(dataset=val_set,
-                            batch_size=args.batch_size,
+                            batch_size=args.eval_batch_size,
                             num_workers=8,
                             pin_memory=True,
                             drop_last=True,
@@ -60,7 +60,7 @@ def train(args, device):
     optimizer = torch.optim.Adam(params=model.parameters(), lr=args.learning_rate)
     scheduler = CosineAnnealingLR(optimizer, T_max=total_step)
     warmup_scheduler = GradualWarmupScheduler(optimizer,
-                                              multiplier=100,
+                                              multiplier=10,
                                               total_epoch=total_step * 0.01,
                                               after_scheduler=scheduler)
     logger.info('')
@@ -175,7 +175,7 @@ def evaluate(dataloader, model, vocab, device):
     logger.info("***** Running evaluation *****")
     logger.info("  Num examples = %d", len(dataloader) * dataloader.batch_size)
     logger.info("  Batch size = %d", dataloader.batch_size)
-    for val_step, batch in tqdm(enumerate(dataloader), desc="Evaluating"):
+    for val_step, batch in enumerate(dataloader):
         model.eval()
 
         encoder_mask, encoder_input, decoder_input, decoder_target = map(lambda x: x.to(device), batch[1:])
@@ -203,7 +203,7 @@ def evaluate(dataloader, model, vocab, device):
     val_loss /= (val_step + 1)
     val_acc /= (val_step + 1)
 
-    logger.info("***** Eval results *****")
+    logger.info("***** Evaluation Ends *****")
 
     return val_loss, val_acc
 

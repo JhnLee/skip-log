@@ -110,3 +110,4 @@ venv.bak/
 # mypy
 .mypy_cache/
 .vscode/settings.json
+hyper_search/hyper_parameter.csv
