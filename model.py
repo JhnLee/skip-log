@@ -68,7 +68,7 @@ class Decoder(nn.Module):
 
 class SkipLog(nn.Module):
     def __init__(self, vocab, embedding_hidden_dim, num_hidden_layer, gru_hidden_dim, device,
-                 dropout_p=0.1, attention_method='dot'):
+                 dropout_p=0.1, attention_method='dot', mode='train'):
         super(SkipLog, self).__init__()
         self.device = device
         self.vocab_size = len(vocab)
@@ -77,8 +77,11 @@ class SkipLog(nn.Module):
         self.dropout = nn.Dropout(dropout_p)
         self.prev_decoder = Decoder(vocab, embedding_hidden_dim, gru_hidden_dim, attention_method)
         self.next_decoder = Decoder(vocab, embedding_hidden_dim, gru_hidden_dim, attention_method)
-        self.prev_loss_fn = nn.CrossEntropyLoss(ignore_index=vocab.index('<PAD>'))
-        self.next_loss_fn = nn.CrossEntropyLoss(ignore_index=vocab.index('<PAD>'))
+        # loss for each sample in batch when evaluation(mean for training)
+        self.mode = mode
+        loss_reduction = 'mean' if self.mode == 'train' else 'none' if self.mode == 'eval' else 'mean'
+        self.prev_loss_fn = nn.CrossEntropyLoss(ignore_index=vocab.index('<PAD>'), reduction=loss_reduction)
+        self.next_loss_fn = nn.CrossEntropyLoss(ignore_index=vocab.index('<PAD>'), reduction=loss_reduction)
 
     def forward(self, encoder_mask, encoder_input, decoder_input, decoder_target):
 
@@ -114,12 +117,14 @@ class SkipLog(nn.Module):
             outputs[t] = prev_output.squeeze(0)
             outputs[max_len + t] = next_output.squeeze(0)
 
-        # (2L x B x V) , (B x 2L)  =>  (B*2L x V) , (B*2L)
-        prev_target = decoder_target.transpose(1, 0)[:max_len]
-        next_target = decoder_target.transpose(1, 0)[max_len:]
+        prev_outputs = outputs[:max_len].transpose(1, 0) # (B x L x V)
+        next_outputs = outputs[max_len:].transpose(1, 0)
 
-        prev_loss = self.prev_loss_fn(outputs[:max_len].view(-1, self.vocab_size), prev_target.reshape(-1))
-        next_loss = self.next_loss_fn(outputs[max_len:].view(-1, self.vocab_size), next_target.reshape(-1))
+        prev_target = decoder_target.transpose(1, 0)[:max_len].transpose(1, 0) # (B x L)
+        next_target = decoder_target.transpose(1, 0)[max_len:].transpose(1, 0)
+        
+        prev_loss = self.prev_loss_fn(prev_outputs.reshape(-1, self.vocab_size), prev_target.reshape(-1))
+        next_loss = self.next_loss_fn(next_outputs.reshape(-1, self.vocab_size), next_target.reshape(-1))            
 
         return outputs, prev_loss + next_loss
 
