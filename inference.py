@@ -35,7 +35,7 @@ def inference(args, device):
                               shuffle=True,
                               num_workers=8,
                               pin_memory=True,
-                              drop_last=True,
+                              drop_last=False,
                               collate_fn=infer_set.batch_function)
 
     # Load model
@@ -45,12 +45,15 @@ def inference(args, device):
                     gru_hidden_dim=args.gru_hidden_dim,
                     device=device,
                     dropout_p=args.dropout_p,
-                    attention_method=args.attention_method)
+                    attention_method=args.attention_method).to(device)
 
-    model.to(device)
+    # load trained parameter
+    best_params = torch.load(args.bestmodel_path)
+    model.load_state_dict(best_params)
     model.eval()
 
     # TODO :
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -76,6 +79,8 @@ def main():
                         help="vocab.txt directory")
     parser.add_argument("--infer_data_path", type=str, default='./data/test_logs_split_20_10.txt',
                         help="train dataset directory")
+    parser.add_argument("--bestmodel_path", type=str, required=True,
+                        help="path of model to use")
 
     args = parser.parse_args()
 

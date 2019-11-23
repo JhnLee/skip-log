@@ -4,6 +4,7 @@ import logging
 import os
 import pandas as pd
 from datetime import datetime
+import tqdm
 
 formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s')
 
@@ -13,7 +14,7 @@ def get_logger(name=None, level=logging.DEBUG):
     logger.handlers.clear()
     logger.setLevel(level)
 
-    ch = logging.StreamHandler()
+    ch = TqdmLoggingHandler()
     ch.setLevel(level)
     ch.setFormatter(formatter)
 
@@ -21,20 +22,40 @@ def get_logger(name=None, level=logging.DEBUG):
     return logger
 
 
+class TqdmLoggingHandler(logging.StreamHandler):
+    """ logging handler for tqdm """
+
+    def __init__(self, level=logging.NOTSET):
+        super(TqdmLoggingHandler, self).__init__(level)
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            tqdm.tqdm.write(msg)
+            self.flush()
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except:
+            self.handleError(record)
+
+
 class HyperParamWriter:
+    """ Hyper parameter writer """
+
     def __init__(self, dir):
         self.dir = dir
         self.hparams = None
         self.load()
         self.writer = dict()
 
-    def update(self, args, tr_loss, tr_acc, val_loss, val_acc):
+    def update(self, args, global_step, tr_loss, tr_acc, val_loss, val_acc):
         now = datetime.now()
         date = '%s-%s-%s %s:%s' % (now.year, now.month, now.day, now.hour, now.minute)
         self.writer.update({'date': date})
 
         self.writer.update(
             {
+                'global_step': global_step,
                 'train_loss': tr_loss,
                 'train_accuracy': tr_acc,
                 'val_loss': val_loss,
@@ -90,4 +111,3 @@ class SummaryManager:
     @property
     def summary(self):
         return self._summary
-

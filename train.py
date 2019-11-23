@@ -63,6 +63,7 @@ def train(args, device):
                                               multiplier=100,
                                               total_epoch=total_step * 0.01,
                                               after_scheduler=scheduler)
+    logger.info('')
 
     # for low-precision training
     if args.fp16:
@@ -83,7 +84,8 @@ def train(args, device):
 
     train_loss = 0
     train_acc = 0
-
+    
+    logger.info('***** Training starts *****')
     for epoch in tqdm(range(args.epochs), desc='epochs'):
 
         for step, batch in tqdm(enumerate(tr_loader), desc='steps', total=len(tr_loader)):
@@ -116,8 +118,11 @@ def train(args, device):
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip_norm)
 
             train_loss += loss.item()
-            train_acc += batch_acc
+            train_acc += batch_acc.item()
 
+            if (step + 1) % args.logging_step == 0:
+                logger.info("training loss: {:.3f}, training accuracy: {:.3f}".format(loss.item(), batch_acc.item()))
+ 
             optimizer.step()
             model.zero_grad()
             global_step += 1
@@ -126,35 +131,40 @@ def train(args, device):
             show_lr = warmup_scheduler.get_lr()[0]
             writer.add_scalars('lr', {'lr': show_lr}, global_step)
 
-            if global_step % args.eval_step == 0:
+        if epoch % args.eval_step == 0:
 
-                val_loss, val_acc = evaluate(val_loader, model, vocab, device)
+            val_loss, val_acc = evaluate(val_loader, model, vocab, device)
 
-                writer.add_scalars('loss', {'train': train_loss / args.eval_step ,
-                                            'val': val_loss}, global_step)
-                writer.add_scalars('acc', {'train': train_acc / args.eval_step ,
-                                           'val': val_acc}, global_step)
+            writer.add_scalars('loss', {'train': train_loss / step ,
+                                        'val': val_loss}, global_step)
+            writer.add_scalars('acc', {'train': train_acc / step ,
+                                       'val': val_acc}, global_step)
 
-                tqdm.write('global_step: {:3}, '
-                           'tr_loss: {:.3f}, '
-                           'val_loss: {:.3f}, '
-                           'tr_acc: {:.3f}, '
-                           'val_acc: {:.3f} '
-                           'lr: {:.3f}'.format(global_step,
-                                               train_loss / args.eval_step,
-                                               val_loss,
-                                               train_acc / args.eval_step,
-                                               val_acc,
-                                               float(show_lr)))
+            logger.info('global_step: {:3}, '
+                       'tr_loss: {:.3f}, '
+                       'val_loss: {:.3f}, '
+                       'tr_acc: {:.3f}, '
+                       'val_acc: {:.3f} '
+                       'lr: {:.3f}'.format(global_step,
+                                           train_loss / step,
+                                           val_loss,
+                                           train_acc / step,
+                                           val_acc,
+                                           float(show_lr)))
 
-                train_loss = 0
-                train_acc = 0
+            train_loss = 0
+            train_acc = 0
 
-                if val_loss < best_val_loss:
-                    name = '/bestmodel_loss_' + str(round(val_loss, 3)) + '.bin'
-                    torch.save(model.state_dict(), args.save_path + name)
-                    best_val_loss = val_loss
-                    best_val_acc = val_acc
+            if val_loss < best_val_loss:
+                # Save model checkpoints
+                output_dir = os.path.join(args.save_path, 'checkpoint-{}'.format(global_step))
+                if not os.path.exists(output_dir):
+                        os.makedirs(output_dir)
+                torch.save(model.state_dict(), os.path.join(output_dir, 'best_model.bin'))
+                torch.save(args, os.path.join(output_dir, 'training_args.bin'))
+                logger.info('Saving model checkpoint to %s', args.save_path)
+                best_val_loss = val_loss
+                best_val_acc = val_acc
 
     return global_step, train_loss, best_val_loss, train_acc, best_val_acc
 
@@ -162,8 +172,10 @@ def train(args, device):
 def evaluate(dataloader, model, vocab, device):
     val_loss = 0
     val_acc = 0
-
-    for val_step, batch in enumerate(dataloader):
+    logger.info("***** Running evaluation *****")
+    logger.info("  Num examples = %d", len(dataloader) * dataloader.batch_size)
+    logger.info("  Batch size = %d", dataloader.batch_size)
+    for val_step, batch in tqdm(enumerate(dataloader), desc="Evaluating"):
         model.eval()
 
         encoder_mask, encoder_input, decoder_input, decoder_target = map(lambda x: x.to(device), batch[1:])
@@ -185,13 +197,15 @@ def evaluate(dataloader, model, vocab, device):
             num_words = not_pad.sum()
             batch_acc = (pred[not_pad] == decoder_target[not_pad]).float().sum() / num_words
 
-            val_loss += loss
-            val_acc += batch_acc
+            val_loss += loss.item()
+            val_acc += batch_acc.item()
 
     val_loss /= (val_step + 1)
     val_acc /= (val_step + 1)
 
-    return val_loss.item(), val_acc
+    logger.info("***** Eval results *****")
+
+    return val_loss, val_acc
 
 
 def set_seed(args):
@@ -204,7 +218,7 @@ def main():
     parser = argparse.ArgumentParser()
 
     # Model parameters
-    parser.add_argument("--embedding_hidden_dim", default=128, type=int,
+    parser.add_argument("--embedding_hidden_dim", default=64, type=int,
                         help="hidden dimension for embedding matrix")
     parser.add_argument("--num_hidden_layer", default=1, type=int,
                         help="number of gru layers in encoder")
@@ -218,12 +232,16 @@ def main():
     # Train parameters
     parser.add_argument("--batch_size", default=1024, type=int,
                         help="batch size")
+    parser.add_argument("--eval_batch_size", default=256, type=int,
+                        help="batch size for validation")
     parser.add_argument("--learning_rate", default=3e-5, type=float,
                         help="The initial learning rate for Adam.")
-    parser.add_argument("--epochs", default=2, type=int,
+    parser.add_argument("--epochs", default=15, type=int,
                         help="total epochs")
-    parser.add_argument("--eval_step", default=50, type=int,
-                        help="show training accuracy on every eval step")
+    parser.add_argument("--eval_step", default=1, type=int,
+                        help="evaluation step")
+    parser.add_argument("--logging_step", default=1000, type=int,
+                        help="show training accuracy on every logging step")
     parser.add_argument("--grad_clip_norm", default=1.0, type=float,
                         help="batch size")
 
@@ -247,9 +265,10 @@ def main():
                         help="train dataset directory")
     parser.add_argument("--val_data_path", type=str, default='./data/val_logs_split_20_10.txt',
                         help="validation dataset directory")
-    parser.add_argument("--save_path", type=str, default='./model/',
+    parser.add_argument("--save_path", type=str, default='./model_saved/',
                         help="directory where model parameters will be saved")
-
+    parser.add_argument("--hyperparam_path", type=str, default='./hyper_search/',
+                        help="directory where hyper parameters will be saved")
     args = parser.parse_args()
 
     if args.device == 'cuda':
@@ -260,20 +279,19 @@ def main():
         logger.info('use cpu')
 
     set_seed(args)
-    logger.info('training starts.')
 
     t = time.time()
     global_step, train_loss, best_val_loss, train_acc, best_val_acc = train(args, device)
     elapsed = time.time() - t
 
-    logger.info('training done.')
+    logger.info('***** Training done *****')
     logger.info('elapsed time: %.3f Hours' % (elapsed / 3600.))
-    logger.info('best acc in testset: %.4f' % train_acc)
-    logger.info('best loss in testset: %.4f' % best_val_loss)
+    logger.info('best acc in test: %.4f' % train_acc)
+    logger.info('best loss in test: %.4f' % best_val_loss)
 
     # Write hyperparameter
     hyper_param_writer = HyperParamWriter('./hyper_search/hyper_parameter.csv')
-    hyper_param_writer.update(args, train_loss, train_acc.item(), best_val_loss, best_val_acc.item())
+    hyper_param_writer.update(args, global_step, train_loss, train_acc, best_val_loss, best_val_acc)
 
 
 if __name__ == '__main__':
