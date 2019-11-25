@@ -75,9 +75,10 @@ def train(args, device):
         model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
 
     # tensorboard
-    if not os.path.exists(args.save_path):
-        os.makedirs(args.save_path)
-    writer = SummaryWriter(args.save_path)
+    output_dir = os.path.join('model_saved/', args.save_path)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    writer = SummaryWriter(output_dir)
 
     best_val_loss = 1e+9
     global_step = 0
@@ -157,9 +158,6 @@ def train(args, device):
 
             if val_loss < best_val_loss:
                 # Save model checkpoints
-                output_dir = os.path.join('model_saved/', args.save_path)
-                if not os.path.exists(output_dir):
-                    os.makedirs(output_dir)
                 torch.save(model.state_dict(), os.path.join(output_dir, 'best_model.bin'))
                 torch.save(args, os.path.join(output_dir, 'training_args.bin'))
                 logger.info('Saving model checkpoint to %s', output_dir)
@@ -191,7 +189,7 @@ def evaluate(dataloader, model, vocab, device):
             outputs, loss = model(**inputs)
 
             
-            ed = outputs.max(dim=2)[1].transpose(0, 1)  # (B x 2L)
+            pred = outputs.max(dim=2)[1].transpose(0, 1)  # (B x 2L)
 
             # mean accuracy except pad token
             not_pad = decoder_target != vocab.index('<PAD>')
