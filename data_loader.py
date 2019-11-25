@@ -2,6 +2,7 @@ from torch.utils.data import Dataset
 from vocab import log_parser
 from collections import defaultdict
 from utils import get_logger
+import random
 import logging
 import torch
 import re
@@ -13,6 +14,7 @@ logger.setLevel(logging.INFO)
 
 class DataSets(Dataset):
     def __init__(self, data_path, vocab_path, augmentation=False):
+        
         self.data_path = data_path
         self.vocab_path = vocab_path
         self.max_len = None
@@ -23,9 +25,9 @@ class DataSets(Dataset):
         self.data = self.load_data()
         self.vocab = self.load_vocab()
 
-        self.group_data()
+        self.pad, self.eol, self.sol, self.unk = [self.vocab.index(t) for t in ['<PAD>', '<EOL>', '<SOL>', '<UNK>']]
 
-        self.pad, self.eol, self.sol = [self.vocab.index(t) for t in ['<PAD>', '<EOL>', '<SOL>']]
+        self.group_data()
 
     def add_special_token(self, prev, input, next):
         input = input + [self.eol]
@@ -43,7 +45,7 @@ class DataSets(Dataset):
         try:
             return self.vocab.index(token)
         except ValueError:
-            return self.vocab.index('<UNK>')
+            return self.unk
 
     def group_data(self):
         logger.info('preprocess data...')
@@ -62,7 +64,15 @@ class DataSets(Dataset):
 
         three_len_logs = []
         for key, logs in grouped_data:
-            three_len_logs += [(key, logs[i:i + 3]) for i in range(len(logs) - 2) if len(logs) > 2]
+            if len(logs) < 3:
+                
+                assert len(logs) == 2
+                # test 데이터의 경우에는 log의 길이가 2보다 짧은 경우 존재
+                # unknown token으로 간주
+                if len(logs) == 2:
+                    logs += ['<UNK>'] * len(logs[-1])
+                
+            three_len_logs += [(key, logs[i:i + 3]) for i in range(len(logs) - 2)]
 
         if self.augmentation is True:
             logger.info('do augmentation')
@@ -84,7 +94,7 @@ class DataSets(Dataset):
         if not os.path.exists(self.vocab_path):
             print("Creating vocab.txt...")
             from vocab import create_vocab
-            create_vocab()
+            create_vocab(self.data)
             print('done.')
         with open(self.vocab_path, 'r') as f:
             vocab = f.read().splitlines()

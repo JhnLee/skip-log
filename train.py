@@ -38,7 +38,7 @@ def train(args, device):
                            collate_fn=tr_set.batch_function)
 
     val_loader = DataLoader(dataset=val_set,
-                            batch_size=args.batch_size,
+                            batch_size=args.eval_batch_size,
                             num_workers=8,
                             pin_memory=True,
                             drop_last=True,
@@ -60,7 +60,7 @@ def train(args, device):
     optimizer = torch.optim.Adam(params=model.parameters(), lr=args.learning_rate)
     scheduler = CosineAnnealingLR(optimizer, T_max=total_step)
     warmup_scheduler = GradualWarmupScheduler(optimizer,
-                                              multiplier=100,
+                                              multiplier=10,
                                               total_epoch=total_step * 0.01,
                                               after_scheduler=scheduler)
     logger.info('')
@@ -76,7 +76,7 @@ def train(args, device):
 
     # tensorboard
     if not os.path.exists(args.save_path):
-        os.mkdir(args.save_path)
+        os.makedirs(args.save_path)
     writer = SummaryWriter(args.save_path)
 
     best_val_loss = 1e+9
@@ -157,12 +157,12 @@ def train(args, device):
 
             if val_loss < best_val_loss:
                 # Save model checkpoints
-                output_dir = os.path.join(args.save_path, 'checkpoint-{}'.format(global_step))
+                output_dir = os.path.join('model_saved/', args.save_path)
                 if not os.path.exists(output_dir):
-                        os.makedirs(output_dir)
+                    os.makedirs(output_dir)
                 torch.save(model.state_dict(), os.path.join(output_dir, 'best_model.bin'))
                 torch.save(args, os.path.join(output_dir, 'training_args.bin'))
-                logger.info('Saving model checkpoint to %s', args.save_path)
+                logger.info('Saving model checkpoint to %s', output_dir)
                 best_val_loss = val_loss
                 best_val_acc = val_acc
 
@@ -175,7 +175,7 @@ def evaluate(dataloader, model, vocab, device):
     logger.info("***** Running evaluation *****")
     logger.info("  Num examples = %d", len(dataloader) * dataloader.batch_size)
     logger.info("  Batch size = %d", dataloader.batch_size)
-    for val_step, batch in tqdm(enumerate(dataloader), desc="Evaluating"):
+    for val_step, batch in enumerate(dataloader):
         model.eval()
 
         encoder_mask, encoder_input, decoder_input, decoder_target = map(lambda x: x.to(device), batch[1:])
@@ -190,7 +190,8 @@ def evaluate(dataloader, model, vocab, device):
         with torch.no_grad():
             outputs, loss = model(**inputs)
 
-            pred = outputs.max(dim=2)[1].transpose(0, 1)  # (B x 2L)
+            
+            ed = outputs.max(dim=2)[1].transpose(0, 1)  # (B x 2L)
 
             # mean accuracy except pad token
             not_pad = decoder_target != vocab.index('<PAD>')
@@ -203,7 +204,7 @@ def evaluate(dataloader, model, vocab, device):
     val_loss /= (val_step + 1)
     val_acc /= (val_step + 1)
 
-    logger.info("***** Eval results *****")
+    logger.info("***** Evaluation Ends *****")
 
     return val_loss, val_acc
 
@@ -265,7 +266,7 @@ def main():
                         help="train dataset directory")
     parser.add_argument("--val_data_path", type=str, default='./data/val_logs_split_20_10.txt',
                         help="validation dataset directory")
-    parser.add_argument("--save_path", type=str, default='./model_saved/',
+    parser.add_argument("--save_path", type=str, required=True,
                         help="directory where model parameters will be saved")
     parser.add_argument("--hyperparam_path", type=str, default='./hyper_search/',
                         help="directory where hyper parameters will be saved")
