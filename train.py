@@ -101,7 +101,8 @@ def train(args, device):
                 'decoder_target': decoder_target,
             }
 
-            outputs, loss = model(**inputs)
+            outputs, prev_loss, next_loss = model(**inputs)
+            loss = prev_loss + next_loss
 
             pred = outputs.max(dim=2)[1].transpose(0, 1)  # (B x 2L)
 
@@ -186,8 +187,8 @@ def evaluate(dataloader, model, vocab, device):
         }
 
         with torch.no_grad():
-            outputs, loss = model(**inputs)
-
+            outputs, prev_loss, next_loss = model(**inputs)
+            loss = prev_loss + next_loss
             
             pred = outputs.max(dim=2)[1].transpose(0, 1)  # (B x 2L)
 

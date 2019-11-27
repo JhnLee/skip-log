@@ -126,7 +126,7 @@ class SkipLog(nn.Module):
         prev_loss = self.prev_loss_fn(prev_outputs.reshape(-1, self.vocab_size), prev_target.reshape(-1))
         next_loss = self.next_loss_fn(next_outputs.reshape(-1, self.vocab_size), next_target.reshape(-1))            
 
-        return outputs, prev_loss + next_loss
+        return outputs, prev_loss, next_loss
 
 
 class Attention(nn.Module):

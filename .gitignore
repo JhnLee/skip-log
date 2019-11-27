@@ -9,6 +9,7 @@ data/
 model/
 model_data_scaled_augmented_3layers/
 model_saved/
+experiment/
 
 # C extensions
 *.so

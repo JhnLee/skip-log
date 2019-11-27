@@ -30,6 +30,8 @@ def inference(args, device, model, loader):
 
     for step, batch in tqdm(enumerate(loader), desc='steps', total=len(loader)):
         blk = batch[0]
+        test_blks += blk
+        
         encoder_mask, encoder_input, decoder_input, decoder_target = map(lambda x: x.to(device), batch[1:])
         inputs = {
                     'encoder_mask': encoder_mask,
@@ -39,10 +41,14 @@ def inference(args, device, model, loader):
                 }
         with torch.no_grad():
             # encoder_input : (B x L)
-            _, loss = model(**inputs)
-            test_blks += blk
-            # take minimum loss value of the log sentence
-            test_losses += loss.reshape(len(blk), -1).mean(dim=1).tolist()
+            _, prev_loss, next_loss = model(**inputs)
+            concat_loss = torch.cat((prev_loss.unsqueeze(0), next_loss.unsqueeze(0)), dim=0)
+            
+            # take maximum value between prev and next loss
+            loss = torch.max(concat_loss, dim=0)[0]
+            
+            # take max loss value of the log sentence
+            test_losses += loss.reshape(len(blk), -1).max(dim=1)[0].tolist()
 
     # blk_id 별로 묶기
     grouped_data = defaultdict(list)
