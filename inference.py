@@ -3,19 +3,66 @@ from model import SkipLog
 from utils import get_logger
 from torch.utils.data import DataLoader
 from collections import defaultdict
+from datetime import datetime
 from tqdm import tqdm
 import pandas as pd
+import numpy as np
 import torch
 import argparse
 import os
 import random
 import logging
 
-from sklearn.metrics import confusion_matrix, roc_curve, auc
+from sklearn.metrics import confusion_matrix, roc_curve, auc, precision_recall_curve
 import matplotlib.pyplot as plt
 
 logger = get_logger('Skip-Log')
 logger.setLevel(logging.INFO)
+
+
+class InferResultWriter:
+    def __init__(self, dir):
+        self.dir = dir
+        self.results = None
+        self.load()
+        self.writer = dict()
+
+    def update(self, args, auroc, f1, precision, recall, eer):
+        now = datetime.now()
+        date = '%s-%s-%s %s:%s' % (now.year, now.month, now.day, now.hour, now.minute)
+        self.writer.update({'date': date})
+
+        self.writer.update(
+            {
+                'AUROC': auroc,
+                'best_F1': f1,
+                'best_precision': precision,
+                'best_recall': recall,
+                'EER': eer,
+            }
+        )
+
+        self.writer.update(vars(args))
+
+        if self.results is None:
+            self.results = pd.DataFrame(self.writer, index=[0])
+        else:
+            self.results = self.results.append(self.writer, ignore_index=True)
+        self.save()
+
+    def save(self):
+        assert self.results is not None
+        self.results.to_csv(self.dir, index=False)
+
+    def load(self):
+        path = os.path.split(self.dir)[0]
+        if not os.path.exists(path):
+            os.mkdir(path)
+            self.results = None
+        elif os.path.exists(self.dir):
+            self.results = pd.read_csv(self.dir)
+        else:
+            self.results = None
 
 
 def set_seed(args):
@@ -25,6 +72,7 @@ def set_seed(args):
 
 
 def inference(args, device, model, loader):
+    model.eval()
     test_blks = []
     test_losses = []
 
@@ -75,8 +123,9 @@ def main():
     args = parser.parse_args()
 
     # Load arguments and best model parameters
-    best_params = torch.load(os.path.join('model_saved/', args.bestmodel_path, 'best_model.bin'))
-    best_args = torch.load(os.path.join('model_saved/', args.bestmodel_path, 'training_args.bin'))
+    logger.info("Use parameter of {}".format(args.bestmodel_path))
+    best_params = torch.load(os.path.join(args.bestmodel_path, 'best_model.bin'))
+    best_args = torch.load(os.path.join(args.bestmodel_path, 'training_args.bin'))
     set_seed(best_args)
 
     # Load Vocab
@@ -90,7 +139,7 @@ def main():
 
     infer_loader = DataLoader(dataset=infer_set,
                               batch_size=2048,
-                              shuffle=True,
+                              shuffle=False,
                               num_workers=8,
                               pin_memory=True,
                               drop_last=False,
@@ -132,10 +181,31 @@ def main():
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     plt.title('Receiver Operating Characteristic')
-    result = 'AUROC : {:.5f}'.format(auc(fpr, tpr))
-    plt.savefig(os.path.join(best_args.save_path, result), dpi=300)
-    logger.info(result)
+    auroc = auc(fpr, tpr)
+    logger.info('AUROC : {:.5f}'.format(auroc))
+    
+    precision, recall, thresholds = precision_recall_curve(true_y, max_losses)
+    f1 = [2 * (pr * re) / (pr + re + 1e-10) for pr, re in zip(precision, recall)]
+    sort_by_f1 = np.argmax(f1)
+    best_f1 = np.array(f1)[sort_by_f1]
+    best_precision = precision[sort_by_f1]
+    best_recall = recall[sort_by_f1]
+    
+    logger.info("best f1 : {}".format(best_f1))
+    logger.info("best precision : {}".format(best_precision))
+    logger.info("best recall : {}".format(best_recall))
+
+    fnr = 1 - tpr
+    EER = fnr[np.nanargmin(np.absolute((fnr - fpr)))]
+    logger.info("EER : {}".format(EER))
+
+    result = 'AUROC:{:.3f}.F1:{:.3f}.EER:{:.3f}.ROC_curve.png'.format(auroc, best_f1, EER)
+    plt.savefig(os.path.join(args.bestmodel_path, result), dpi=300)
     logger.info('***** Inference done *****')
+
+    # Write results
+    result_writer = InferResultWriter('./inference_result/results.csv')
+    result_writer.update(best_args, auroc, best_f1, best_precision, best_recall, EER)
 
 if __name__ == '__main__':
     main()

@@ -11,7 +11,7 @@ ATTENTION_METHOD="dot"
 BATCH_SIZE=1024
 EVAL_BATCH_SIZE=512
 LEARNING_RATE=3e-5
-EPOCHS=5
+EPOCHS=3
 EVAL_STEP=1
 LOGGING_STEP=1000
 GRAD_CLIP_NORM=1.0
@@ -24,10 +24,10 @@ FP16_OPT_LEVEL="O1"
 #SEED=0
 
 #path params
-SAVE_PATH="layer=${NUM_HIDDEN_LAYER}.hidden=${GRU_HIDDEN_DIM}.batch=${BATCH_SIZE}.epoch=${EPOCHS}"
+SAVE_PATH="model_saved/layer=${NUM_HIDDEN_LAYER}.embed=${EMBEDDING_HIDDEN_DIM}.hidden=${GRU_HIDDEN_DIM}.batch=${BATCH_SIZE}.epoch=${EPOCHS}"
 
 #run traininer
-for SEED in {1..4}
+for SEED in {0..4}
 do
 	TMP_PATH="${SAVE_PATH}/seed${SEED}"
 
@@ -49,7 +49,7 @@ do
 		--fp16_opt_level=${FP16_OPT_LEVEL}\
 		--seed=${SEED}\
 		--save_path=${TMP_PATH}
-	
+
 	python inference.py\
 		--bestmodel_path=${TMP_PATH}
 done

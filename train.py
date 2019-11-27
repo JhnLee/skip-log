@@ -75,10 +75,9 @@ def train(args, device):
         model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
 
     # tensorboard
-    output_dir = os.path.join('model_saved/', args.save_path)
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    writer = SummaryWriter(output_dir)
+    if not os.path.exists(args.save_path):
+        os.makedirs(args.save_path)
+    writer = SummaryWriter(args.save_path)
 
     best_val_loss = 1e+9
     global_step = 0
@@ -159,9 +158,9 @@ def train(args, device):
 
             if val_loss < best_val_loss:
                 # Save model checkpoints
-                torch.save(model.state_dict(), os.path.join(output_dir, 'best_model.bin'))
-                torch.save(args, os.path.join(output_dir, 'training_args.bin'))
-                logger.info('Saving model checkpoint to %s', output_dir)
+                torch.save(model.state_dict(), os.path.join(args.save_path, 'best_model.bin'))
+                torch.save(args, os.path.join(args.save_path, 'training_args.bin'))
+                logger.info('Saving model checkpoint to %s', args.save_path)
                 best_val_loss = val_loss
                 best_val_acc = val_acc
 
