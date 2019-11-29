@@ -43,7 +43,7 @@ class Decoder(nn.Module):
     def __init__(self, vocab, embedding_hidden_dim, gru_hidden_dim, attention_method):
         super(Decoder, self).__init__()
         self.gru_layer = nn.GRU(embedding_hidden_dim, gru_hidden_dim)
-        self.attention_layer = Attention(attention_method, gru_hidden_dim * 2)
+        self.attention_layer = Attention(attention_method, gru_hidden_dim)
         self.concat_layer = nn.Linear(gru_hidden_dim * 2, gru_hidden_dim)
         self.fc_layer = nn.Linear(gru_hidden_dim, len(vocab))
 
