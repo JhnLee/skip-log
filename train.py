@@ -82,8 +82,8 @@ def train(args, device):
     best_val_loss = 1e+9
     global_step = 0
 
-    train_loss = 0
-    train_acc = 0
+    train_loss, logging_loss = 0, 0
+    train_acc, logging_acc = 0, 0
     
     logger.info('***** Training starts *****')
     for epoch in tqdm(range(args.epochs), desc='epochs'):
@@ -122,39 +122,34 @@ def train(args, device):
             train_acc += batch_acc.item()
 
             if (step + 1) % args.logging_step == 0:
-                logger.info("training loss: {:.3f}, training accuracy: {:.3f}".format(loss.item(), batch_acc.item()))
+                acc_ = (train_acc - logging_acc) / args.logging_step
+                loss_ = (train_loss - logging_loss) / args.logging_step
+                logger.info("training loss: {:.3f}, training accuracy: {:.3f}".format(loss_, acc_))
+                writer.add_scalars('loss', {'train': loss_}, global_step)
+                writer.add_scalars('acc', {'train': acc_}, global_step)
+                show_lr = warmup_scheduler.get_lr()[0]
+                writer.add_scalars('lr', {'lr': show_lr}, global_step)
+                logging_acc, logging_loss = train_acc, train_loss
  
             optimizer.step()
             model.zero_grad()
             global_step += 1
-            warmup_scheduler.step()
-
-            show_lr = warmup_scheduler.get_lr()[0]
-            writer.add_scalars('lr', {'lr': show_lr}, global_step)
+            warmup_scheduler.step()            
 
         if epoch % args.eval_step == 0:
 
             val_loss, val_acc = evaluate(val_loader, model, vocab, device)
 
-            writer.add_scalars('loss', {'train': train_loss / step ,
-                                        'val': val_loss}, global_step)
-            writer.add_scalars('acc', {'train': train_acc / step ,
-                                       'val': val_acc}, global_step)
+            writer.add_scalars('loss', {'val': val_loss}, global_step)
+            writer.add_scalars('acc', {'val': val_acc}, global_step)
 
             logger.info('global_step: {:3}, '
-                       'tr_loss: {:.3f}, '
                        'val_loss: {:.3f}, '
-                       'tr_acc: {:.3f}, '
                        'val_acc: {:.3f} '
                        'lr: {:.3f}'.format(global_step,
-                                           train_loss / step,
                                            val_loss,
-                                           train_acc / step,
                                            val_acc,
                                            float(show_lr)))
-
-            train_loss = 0
-            train_acc = 0
 
             if val_loss < best_val_loss:
                 # Save model checkpoints

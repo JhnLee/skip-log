@@ -10,6 +10,7 @@ model/
 model_data_scaled_augmented_3layers/
 model_saved/
 experiment/
+w2v_tmp/
 
 # C extensions
 *.so
